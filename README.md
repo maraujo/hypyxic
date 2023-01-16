@@ -19,7 +19,7 @@ This package was based on Matlab implementation of Hypoxic Burden made by Philip
 
 ## Test
 
-```console
+
 python test_hypyxic.py
 
 
