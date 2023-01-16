@@ -19,16 +19,16 @@ This package was based on Matlab implementation of Hypoxic Burden made by Philip
 
 ## Test
 
-
+```bash
 python test_hypyxic.py
-
+```
 
 ## Usage
 
 ```python
 from hypyxic import compute_hypoxic_burden
 hypoxic_burden = compute_hypoxic_burden(sp02_signal, sp02_sr, sleep_stage_annotation, sleep_stage_sr, resp_events_start, resp_events_duration, to_plot=False)
-
+```
 ## Warning
 
 This implementation output is 19.05639538996541, the original matlab output is 19.433.
