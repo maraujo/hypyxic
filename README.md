@@ -5,7 +5,8 @@ Hypyxic is a python code to compute sleep apnea specific hypoxic burden (SASHB) 
 ## About
 This package was based on Matlab implementation of Hypoxic Burden made by Philip de Chazal at https://github.com/pdechazal/Hypoxic-Burden. 
 
-This code was written by Matheus Araujo, more info at: https://www.matheusaraujo.com/
+This code was written by Matheus Araujo, more info at: https://www.matheusaraujo.com/.
+
 This code is suppose to be a full open-source alternative to compute sleep apnea specific hypoxic burden (SASHB), since Matlab is not completely open-source.
 
 
