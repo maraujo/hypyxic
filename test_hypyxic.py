@@ -20,6 +20,6 @@ if __name__ == "__main__":
         sp02_signal = pd.DataFrame(sp02["Sig"]).T[0]
         sp02_sr = pd.DataFrame(sp02["SR"])[0][0]
         
-        hypoxic_burden = compute_hypoxic_burden(sp02_signal, sp02_sr, sleep_stage_annotation, sleep_stage_sr, resp_events_start, resp_events_duration, to_plot=False)
+        hypoxic_burden = compute_hypoxic_burden(sp02_signal, sp02_sr, sleep_stage_annotation, sleep_stage_sr, resp_events_start, resp_events_duration, to_plot=True)
         logging.warning("This implementation output is {}, the original matlab output is {}.\nUse at your own risk.".format(hypoxic_burden, 19.4330))
         

@@ -1,9 +1,11 @@
 # The Hypyxic package
 
-Hypyxic is a python code to compute hypoxic burden from oxygen desaturation signal.
+Hypyxic is a python code to compute sleep apnea specific hypoxic burden (SASHB) from oxygen desaturation signal and sleep data.
 
 ## About
 This package was based on Matlab implementation of Hypoxic Burden made by Philip de Chazal at https://github.com/pdechazal/Hypoxic-Burden. 
+
+This code was written by Matheus Araujo, more info at: https://www.matheusaraujo.com/
 
 ## References
 
@@ -31,8 +33,10 @@ hypoxic_burden = compute_hypoxic_burden(sp02_signal, sp02_sr, sleep_stage_annota
 ```
 ## Warning
 
-This implementation output is 19.05639538996541, the original matlab output is 19.433.
+This implementation output on the test data is 19.361256096995703, the original matlab output is 19.433.
 Use at your own risk.
+
+The reason of this difference is that MATLAB code is not 100% convertible to python, since MATLAB is a closed source enviroment. More specifically, funcions like findpeaks are the 100% the same.
 
 ## Contributing
 

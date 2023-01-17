@@ -5,9 +5,11 @@ import matplotlib.pyplot as plt
 from scipy.signal import filtfilt
 from scipy.signal import find_peaks
 
-
+# compute_hypoxic_burden was based on Matlab implementation of Hypoxic Burden made by Philip de Chazal at https://github.com/pdechazal/Hypoxic-Burden. 
 def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Series, sleep_stages_sr: int, respiratory_events_start: pd.Series, respiratory_events_duration: pd.Series, nan_if_empty = True, to_plot=True):
     hypoxic_burden = np.nan
+    if to_plot:
+        fig, axs = plt.subplots(3, clear=True)
     
     # Sanity checks
     if spo2_sr != 1 or sleep_stages_sr != 1:
@@ -48,7 +50,9 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
             if (end_event - 120 > 0) and (end_event + 120 < num_spO2_samples):
                 spo2_in_event = spo2[end_event - 120 : end_event +120]
                 spo2_in_events.loc[event_i, :] = spo2_in_event.values
-        mean_spo2_in_events = spo2_in_events.mean(skipna=True)
+            else:
+                raise Exception("Not implemented: There is no 120s before and after end of event.")
+        mean_spo2_in_events = spo2_in_events.mean(skipna=True) # This is the ensemble averaged SpO2 curve
         if spo2_sr == 1: # For now this should be always true.
             # This comment is from the original code.
             # %     %Code to design the FIR lowpass filter with cutoff at 1/30Hz
@@ -68,17 +72,18 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 -0.002425120103463,  -0.019969417749860,  -0.021415481383353,  -0.014258087808069,
                 -0.005659450344228,   0.000207543145171,   0.002485940327008,   0.002341700062534,
                 0.001350397179936,   0.000514594526374,   0.000109398212241]
+            
             # Design the filter
             # Helped by: https://dsp.stackexchange.com/questions/11466/differences-between-python-and-matlab-filtfilt-function
             # TODO: For some reason the shape returned by matlab is not the same of the input signal.
-            spo2_filtered = filtfilt(B,1, mean_spo2_in_events.values, axis=0,  padtype = 'odd', padlen=3*(max(len(B),1)-1))
-
+            spo2_filtered = filtfilt(B,1, mean_spo2_in_events.values, axis=0,  padtype = 'odd')
+            
             #The filtered averaged SpO2 signal is truncated to span the average onset point to the minimum of the average event gap and 90 seconds
             start=int(120*spo2_sr - avg_event_duration*spo2_sr)
             final=int(120*spo2_sr + min(90,avg_event_gap)*spo2_sr) #Limit to 90 seconds
 
             if to_plot:
-                ax = pd.Series(spo2_filtered[start:final]).plot()
+                ax = pd.Series(spo2_filtered[start:final]).plot(ax=axs[0])
                 pd.Series(mean_spo2_in_events.values[start:final]).plot(ax=ax)
             
             win_start = -1
@@ -96,7 +101,7 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                     
                 
                 #3b. Find maximum difference between start of truncated averaged SpO2 signal and Nadir (MaxDesatOnset).
-                left_peak_indexes, peaks_props= find_peaks(spo2_filtered[start: start+nadir_index])
+                left_peak_indexes, peaks_props = find_peaks(spo2_filtered[start: start+nadir_index])
                 left_peaks = spo2_filtered[start: start+nadir_index][left_peak_indexes]
                 if len(left_peak_indexes) > 0:
                     max_desat_onset = spo2_filtered[start: start+nadir_index][left_peak_indexes].max()
@@ -108,16 +113,17 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                         ax.scatter(win_start, spo2_filtered[start:final][win_start], color="r", marker="<")
                     
                     #3d. Find maximum difference between Nadir and the end of the SpO2 response (MaxDesatOffset).
-                    right_peak_indexes, peaks_props= find_peaks(spo2_filtered[start+nadir_index:-1])
-                    right_peaks = spo2_filtered[start+nadir_index:-1][right_peak_indexes]
+                    right_peak_indexes, peaks_props = find_peaks(spo2_filtered[start + nadir_index:])
+                    right_peaks = spo2_filtered[start+nadir_index:][right_peak_indexes]
                     if len(right_peak_indexes) > 0:
-                        max_desat_offset = spo2_filtered[start+nadir_index: -1][right_peak_indexes].max()
+                        max_desat_offset = spo2_filtered[start + nadir_index :][right_peak_indexes].max()
                         #3e.	Find first peak at least 75% of amplitude of MaxDesatOnset after the time occurrence of Nadir. This is the end point of the search window (WinFinish).
                         indexes_peaks_max_desat_offset = np.where(right_peaks - nadir > 0.75 * (max_desat_offset - nadir))[0]
                         win_finish = right_peak_indexes[indexes_peaks_max_desat_offset[0]] + nadir_index
                         if to_plot:
                             ax.scatter(win_finish, spo2_filtered[start:final][win_finish], color="g", marker=">")
-                            plt.show()
+                            ax.set_title("Averaged desaturation curve")
+                            
                         
         if len(nadir_indexes) == 0 or win_start == -1 or win_finish == -1:
             logging.warning("Using population defaults")
@@ -129,6 +135,8 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
         percent_mins_desat = 0
         limit = 0 #Prevents double counting of areas when events are within window width of each other
         
+        segments_area_to_plot = []
+        
         for event_i in range(num_events):
             finish = round((respiratory_events_start[event_i] + respiratory_events_duration[event_i])*spo2_sr + 0.5)
             if finish-100*spo2_sr > 0 and finish + win_finish < spo2.shape[0]:
@@ -138,35 +146,48 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 # %           4bi.	If any of the SpO2 curve is above the pre-event baseline, then do not add this negative area
                 # %           4bii.	If event search window overlaps the next event, then do not add the area twice.
                 
+                # As defined by Ali et al: The preevent baseline saturation was defined as the maximum SpO2 during the 100 s prior to the end of the event.
                 # Define a range of indices for the last 100 seconds of data
                 last_100_seconds = range(finish-int(100*spo2_sr), finish)
                 
-                # Find the maximum SpO2 level in the last 100 seconds
+                # 4a. Find the maximum SpO2 level in the last 100 seconds
                 max_spo2_last_100_seconds = spo2[last_100_seconds].max()
 
                 # Define a range of indices for the window of time being analyzed
                 analysis_window = range(max(finish + win_start, limit), finish + win_finish)
+                
+                if to_plot:
+                    spo2[analysis_window].reset_index(drop=True).plot(ax=axs[1], linewidth=0.2)
+                    segments_area_to_plot.append({
+                        "signal" :  spo2[analysis_window],
+                        "threshold" : max_spo2_last_100_seconds
+                    })
+                # Find the area between pre-event baseline, the SpO2 curve, and WinStart and WinEnd of the search window.
+                # If any of the SpO2 curve is above the pre-event baseline, then do not add this negative area
+                area_below_threshold = (max_spo2_last_100_seconds - spo2[analysis_window]).apply(lambda x: max(x,0)).fillna(0).sum()
 
-                # Find the number of minutes during which the SpO2 level is below the threshold
-                minutes_below_threshold = (max_spo2_last_100_seconds - spo2[analysis_window]).fillna(0).sum()
-
-                # Calculate the percentage of minutes during which the SpO2 level is below the threshold
-                percent_aux = (minutes_below_threshold / (60 * spo2_sr)) 
+                # Calculate the percentage per minute during which the SpO2 level is below the threshold
+                percent_aux = (area_below_threshold / (60 * spo2_sr)) 
                 percent_mins_desat += percent_aux
 
                 limit = finish + win_finish
-                # percent_mins_desat = percent_mins_desat +  nansum( 
-                #                                                   max( spo2[finish-100*int(sp02_sr) : finish].max() - spo2[max(finish + win_finish, limit) : finish + win_finish]
-                #                                                       nanmax(
-                #                                                           SpO2phys(Finish-100*SpO2.SR:Finish)
-                #                                                           )
-                #                                                       -
-                #                                                       SpO2phys(
-                #                                                           max(Finish+WinStart,Limit):Finish+WinFinish
-                #                                                           )
-                #                                                       ,0) 
-                #                                                   )/(60*SpO2.SR); %percent minutes
+        if to_plot:
+            axs[1].set_title("All desaturations")
             
+            index = 0
+            for segment in segments_area_to_plot:
+                segment["signal"].index = range(index, index+segment["signal"].shape[0])
+                ax = segment["signal"].plot(ax=axs[2])
+                y0 = [segment["threshold"]] * len(segment["signal"])
+                y1 = segment["signal"]
+                ax.fill_between(range(segment["signal"].index[0], segment["signal"].index[-1] + 1), y0, y1, where = y0 > y1, alpha = 0.2)
+                # ax.axhline(segment["threshold"], xmin=segment["signal"].index[0], xmax=segment["signal"].index[-1], linewidth=0.4)
+                ax.plot([segment["signal"].index[0], segment["signal"].index[-1]], [segment["threshold"], segment["threshold"]], linewidth=0.2)
+                index = segment["signal"].index[-1]
+            
+            axs[2].set_title("Individual Hypoxic Burden")
+            plt.tight_layout()
+            plt.show()
         hour_sleep = (~spo2[(sleep_stages > 0) & (sleep_stages < 9)].isnull()).sum() / 3600*sleep_stages_sr
         HB = percent_mins_desat / hour_sleep
         return HB
