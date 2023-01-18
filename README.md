@@ -2,6 +2,8 @@
 
 Hypyxic is a python code to compute sleep apnea specific hypoxic burden (SASHB) from oxygen desaturation signal and sleep data. 
 
+Hypoxic burden value. units are percent desaturation minutes per hour of sleep.
+
 ## About
 This package was based on Matlab implementation of Hypoxic Burden made by Philip de Chazal at https://github.com/pdechazal/Hypoxic-Burden. 
 
@@ -42,6 +44,9 @@ This implementation output on the test data is **19.361256096995703**, the origi
 Use at your own risk.
 
 The reason of this difference is that MATLAB code is **not** 100% convertible to python, since MATLAB is a closed source enviroment. In particular, funcions like findpeaks are **not** 100% the same.
+
+## Known issues from original matlab code (this was not addressed yet.)
+The average event gap should be the average offset to next event onset gap. Currently it is average time between event onsets 
 
 ## Contributing
 

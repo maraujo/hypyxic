@@ -6,7 +6,43 @@ from scipy.signal import filtfilt
 from scipy.signal import find_peaks
 
 # compute_hypoxic_burden was based on Matlab implementation of Hypoxic Burden made by Philip de Chazal at https://github.com/pdechazal/Hypoxic-Burden. 
-def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Series, sleep_stages_sr: int, respiratory_events_start: pd.Series, respiratory_events_duration: pd.Series, nan_if_empty = True, to_plot=True):
+def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Series, sleep_stages_sr: int, respiratory_events_start: pd.Series, respiratory_events_duration: pd.Series, nan_if_empty = True, to_plot=True):        
+    # %%%%%%%%%%%
+    # %HB calculation - Original Comments
+    # %%%%%%%%%%%%%
+    # %Steps
+    # %   
+    # % 1.	Determine the timing of the average event from the event files
+    # %       a.	Calculate the average event duration (DurAvg)
+    # %       b.	Calculate the average event gap (AvgEventGap)
+    # % 2.	Overlay the oxygen saturation signals (SpO2) associated with all respiratory events. 
+    # %       The signals are synchronized at the termination of the respiratory events (TimeZero) 
+    # %       and the sampling window includes the SpO2 signal from TimeZero -120 seconds to TimeZero +120 seconds. 
+    # %       a.	They are averaged to form the ensemble averaged SpO2 curve.
+    # %       b.	The ensemble averaged SpO2 curve is filtered with a 0.03Hz low pass filter to form the filtered ensemble averaged SpO2 curve.
+    # %       c.	The filtered averaged SpO2 signal is truncated to span the average onset point to the minimum of the average onset of the next event and 90 seconds. 
+    # %           It is truncated to TimeZero-DurAvg to TimeZero + the minimum of 90 seconds and AvgEventGap. The resulting signal is referred to as the SpO2 response.
+    # % 3.	Determine the start and end point of the search window from the SpO2 response.
+    # %       a.	Find minimum point of SpO2 response (Nadir)
+    # %       b.	Find maximum difference between start of truncated averaged SpO2 signal and Nadir (MaxDesatOnset). 
+    # %       c.	Find last peak at least 75% of amplitude of MaxDesatOnset before the time occurrence of Nadir. This is the start point of the search window (WinStart). 
+    # %       d.	Find maximum difference between Nadir and the end of the SpO2 response (MaxDesatOffset). 
+    # %       e.	Find first peak at least 75% of amplitude of MaxDesatOnset after the time occurrence of Nadir. This is the end point of the search window (WinFinish). 
+    # % 4.	For each event do the following
+    # %       a.	Find the pre-event baseline saturation which is defined as the maximum SpO2 during the 100 seconds prior to the end of the event.
+    # %       b.	Find the area between pre-event baseline, the SpO2 curve, and WinStart and WinEnd of the search window.
+    # %           i.	If any of the SpO2 curve is above the pre-event baseline, then do not add this negative area
+    # %           ii.	If event search window overlaps the next event, then do not add the area twice.
+    # % 5.	The Hypoxic Burden is defined as the sum event areas divided by the sleep time and has units of %minutes per hour.
+
+    # Arguments
+    # spo2: 1hz oxigen saturation signal
+    # spo2_sr: should be 1
+    # sleep_stages: Should be the same length of spo2 with sleep stage annotation with codings [0 1 2 3 4 5 9] representing {'Wake','Stage 1','Stage 2','Stage 3','Stage 4','REM','Indeterminant'}
+    # sleep_stages_sr: should be 1
+    # respiratory_events_start: Time in seconds from start of the recording for the start of a respiration event
+    # respiratory_events_duration: Duration of the respective event. The length should be the same of respiratory_events_start
+    
     hypoxic_burden = np.nan
     if to_plot:
         fig, axs = plt.subplots(3, clear=True)
