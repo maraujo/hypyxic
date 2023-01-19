@@ -207,9 +207,10 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 percent_mins_desat += percent_aux
 
                 limit = finish + win_finish
+        hour_sleep = (~spo2[(sleep_stages > 0) & (sleep_stages < 9)].isnull()).sum() / 3600*sleep_stages_sr
+        HB = percent_mins_desat / hour_sleep
         if to_plot:
-            axs[1].set_title("All desaturations")
-            
+            axs[1].set_title("All desaturations")  
             index = 0
             for segment in segments_area_to_plot:
                 segment["signal"].index = range(index, index+segment["signal"].shape[0])
@@ -221,9 +222,7 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 ax.plot([segment["signal"].index[0], segment["signal"].index[-1]], [segment["threshold"], segment["threshold"]], linewidth=0.2)
                 index = segment["signal"].index[-1]
             
-            axs[2].set_title("Individual Hypoxic Burden")
+            axs[2].set_title("Individual Hypoxic Burden. Hypoxic Burden={}".format(HB))
             plt.tight_layout()
             plt.show()
-        hour_sleep = (~spo2[(sleep_stages > 0) & (sleep_stages < 9)].isnull()).sum() / 3600*sleep_stages_sr
-        HB = percent_mins_desat / hour_sleep
         return HB
