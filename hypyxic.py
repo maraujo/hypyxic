@@ -6,7 +6,7 @@ from scipy.signal import filtfilt
 from scipy.signal import find_peaks
 
 # compute_hypoxic_burden was based on Matlab implementation of Hypoxic Burden made by Philip de Chazal at https://github.com/pdechazal/Hypoxic-Burden. 
-def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Series, sleep_stages_sr: int, respiratory_events_start: pd.Series, respiratory_events_duration: pd.Series, nan_if_empty = True, to_plot=True):        
+def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Series, sleep_stages_sr: int, respiratory_events_start: pd.Series, respiratory_events_duration: pd.Series, nan_if_empty = True, to_plot=True, return_only_hb = True):        
     # %%%%%%%%%%%
     # %HB calculation - Original Comments
     # %%%%%%%%%%%%%
@@ -87,7 +87,9 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 spo2_in_event = spo2[end_event - 120 : end_event +120]
                 spo2_in_events.loc[event_i, :] = spo2_in_event.values
             else:
-                raise Exception("Not implemented: There is no 120s before and after end of event.")
+                logging.warning("Not implemented: There is no 120s before and after end of event.")
+                logging.warning("Event {} of {}.".format(event_i, num_events))
+                continue
         mean_spo2_in_events = spo2_in_events.mean(skipna=True) # This is the ensemble averaged SpO2 curve
         if spo2_sr == 1: # For now this should be always true.
             # This comment is from the original code.
@@ -157,8 +159,11 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                         indexes_peaks_max_desat_offset = np.where(right_peaks - nadir > 0.75 * (max_desat_offset - nadir))[0]
                         win_finish = right_peak_indexes[indexes_peaks_max_desat_offset[0]] + nadir_index
                         if to_plot:
-                            ax.scatter(win_finish, spo2_filtered[start:final][win_finish], color="g", marker=">")
-                            ax.set_title("Averaged desaturation curve")
+                            try:
+                                ax.scatter(win_finish, spo2_filtered[start:final][win_finish], color="g", marker=">")
+                                ax.set_title("Averaged desaturation curve")
+                            except IndexError:
+                                ax.set_title("Index error: {}".format(indexes_peaks_max_desat_offset))
                             
                         
         if len(nadir_indexes) == 0 or win_start == -1 or win_finish == -1:
@@ -172,8 +177,10 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
         limit = 0 #Prevents double counting of areas when events are within window width of each other
         
         segments_area_to_plot = []
+        events_info = []
         
         for event_i in range(num_events):
+            event_info = {}
             finish = round((respiratory_events_start[event_i] + respiratory_events_duration[event_i])*spo2_sr + 0.5)
             if finish-100*spo2_sr > 0 and finish + win_finish < spo2.shape[0]:
                 # %Double count and negative area correction
@@ -205,10 +212,19 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 # Calculate the percentage per minute during which the SpO2 level is below the threshold
                 percent_aux = (area_below_threshold / (60 * spo2_sr)) 
                 percent_mins_desat += percent_aux
-
                 limit = finish + win_finish
+                event_info["spo2_baseline"] = max_spo2_last_100_seconds
+                event_info["spo2_max"] = spo2[analysis_window].max()
+                event_info["spo2_min"] = spo2[analysis_window].min()
+                event_info["percent_mins_desat"] = percent_aux
+                event_info["start"] = int(respiratory_events_start[event_i])
+                event_info["end"] = int(finish)
+                events_info.append(event_info)
+                
         hour_sleep = (~spo2[(sleep_stages > 0) & (sleep_stages < 9)].isnull()).sum() / 3600*sleep_stages_sr
         HB = percent_mins_desat / hour_sleep
+        
+        
         if to_plot:
             axs[1].set_title("All desaturations")  
             index = 0
@@ -217,12 +233,25 @@ def compute_hypoxic_burden(spo2: pd.Series, spo2_sr: int, sleep_stages: pd.Serie
                 ax = segment["signal"].plot(ax=axs[2])
                 y0 = [segment["threshold"]] * len(segment["signal"])
                 y1 = segment["signal"]
-                ax.fill_between(range(segment["signal"].index[0], segment["signal"].index[-1] + 1), y0, y1, where = y0 > y1, alpha = 0.2)
+                try:
+                    ax.fill_between(range(segment["signal"].index[0], segment["signal"].index[-1] + 1), y0, y1, where = y0 > y1, alpha = 0.2)
+                except:
+                    continue
                 # ax.axhline(segment["threshold"], xmin=segment["signal"].index[0], xmax=segment["signal"].index[-1], linewidth=0.4)
                 ax.plot([segment["signal"].index[0], segment["signal"].index[-1]], [segment["threshold"], segment["threshold"]], linewidth=0.2)
                 index = segment["signal"].index[-1]
             
             axs[2].set_title("Individual Hypoxic Burden. Hypoxic Burden={}".format(HB))
             plt.tight_layout()
-            plt.show()
-        return HB
+            plt.savefig(r"E:\data\tmp\viz\latest_HB.png")
+            plt.close()
+        
+        if return_only_hb:
+            return HB
+        
+        else:
+            HB_info = {}
+            HB_info["HB"] = HB
+            HB_info["events_info"] = events_info
+            HB_info["sample_rate"] = spo2_sr
+            return HB_info
